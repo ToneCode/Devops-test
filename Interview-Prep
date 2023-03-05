@@ -1,0 +1,239 @@
+Production
+Requirements
+ What are the requirements for going to production?
+Provisioning
+ How do you provision the infrastructure required for deploying the application? (Terraform, Pulumi, CloudFormation, ...)
+Installation
+ How to install the application and its dependencies? (Container, Bash Script, Ansible, ...)
+Deployment
+ How to deploy the application or the application service? (k8s, cloud instances)
+Configuration
+ How to configure the application? (k8s, Ansible, ...)
+Resiliency
+ Your app is able to withstand outages (usually by implement multi-region or multi-cloud architectures)
+ Your app will scale up and down in response to load change
+Technologies 💻
+Git Repositories
+CI
+ Is there CI for every project?
+ Linting and Styling
+ Unit tests
+ E2E testing
+Security
+ Least Privilege and Zero Trust
+ Make sure only people from team/company have access to the repositories
+Automation
+ This is quite advanced but still, you may want to consider automating repositories creation and access control (using technologies like Terraform or programming languages, you can automate fully the process of repositories management)
+Cloud
+Provisioning
+ Resources managed through IaC technologies such as Terrform, Pulumi, etc.
+If at any point you need restore you entire infrastructure you have the code to do so and can perform it quite quickly
+Tracking and Monitoring
+ Resources are tagged, labeled
+ Env (e.g. staging, prod, dev)
+ Owner (e.g. team)
+Accounts
+ Separate accounts for dev, staging, production, ...
+Why? better isolation, granular and accurate authentication and authorization, reporting per env, ...
+Resources
+ Resources Quotas are set (no one wants to hit high bills)
+ Important resources are protected from being removed - whether directly, using internal cleanup tooling or any other method
+ One option: Prevent allowing to delete a resource if there is no label called 'can_be_deleted' on it
+ Another option: Enforce users to write the resource name when removing it (this is something that is already implemented by some cloud providers, but you can implement in your tooling as well)
+Reliability
+ No single point of failure
+ Resources deployed across availability zones, regions, etc.
+Kubernetes
+Resource Management
+ Apply/Add labels for every type of resources. You may use this page as a suggestion to which labels you should be adding
+ Every workload has requests defined for CPU and memory (this ensures the workload gets the resources it requires and it's scheduled on the right node)
+ Every workload has limits defined for memory (but NOT CPU)
+CI/CD
+ CI/CD for Cluster bootstraping
+ CD process for manifests/configurations (using something like Flux, ArgoCD)
+ Make sure cluster bootstraping (the process of preparing the cluster) is managed fully using GitOps
+Cluster Management
+ Cluster for each environment? Dev, QA, Staging, Production
+ Per region? Per cloud? How distributed your environment should be?
+ Cluster Policy Management
+ Networking Policies
+ Storage Policies
+Scaling
+Cluster Scaling
+ Choose between manually managing scaling or completely managed scaling
+ For different reasons, you might want to consider setting minimum node and max nodes for your node pool
+Application/Pod Scaling
+ VPA (Vertical Pod Autoscaler)
+ HPA (Horizontal)
+Chaos Engineering
+ Choose Chaos Engineering framework that is compatible with Kubernetes
+ Chaos-Mesh
+ Litmus Experiments
+GitOps - ArgoCD
+Git Repositories
+ Infra code (Manifests, Configurations, etc.) is in a separate repository (and not in application repository)
+GitOps Management
+ GitOps adopted for GitOps agents themselves and not only for app related code and infra
+
+ DON'T install ArgoCD with kubectl commands
+
+ Helm chart not recommended as it lags behind official releases of new ArgoCD releases
+
+ Consider:
+
+ Hosted Argo CD instance (pros: maintenance is on others. cons: make sure you have some money in the wallet)
+ ArgoCD for managing ArgoCD (pros: easy DR, rollbacks, ... and full audit and changelog. cons: maintenance)
+ Consider using Argo CD Pilot for that which is "opinionated way of installing Argo-CD and managing GitOps repositories"
+ Think about:
+
+ One ArgoCD to control multiple clusters (why not: single point of failure)
+ Argo CD per cluster (why not: a lot of maintenance and basically over complexity)
+Sync Strategy
+ Auto Prune (resources deleted when files/content deleted)
+ Self-heal (cluster state corrected based on Git state and when manual changes done to the cluster)
+Monitoring
+ Choose monitoring solution
+If you can afford it, consider going for ready monitoring solutions like DataDog, NewRelic, ...
+Be aware of maintenance and how much time you are willing to invest in developing and maintaining monitoring solution
+ Alerts/Monitors
+ Critical alerts defined
+ Team gets notifications on critical alerts (Slack, Phone, Email, ... perhaps all. whatever works best for the team)
+ Incident Management
+ Dashboards
+Chaos Engineering
+The interesting topic of ensuring your environment can withstand unexpected disruptions
+
+TODO: insert a list of steps to go towards the process of establishing and integrating chaos engineering in your environments
+
+IaC
+The Chosen One
+Things to consider when choosing IaC technology:
+Maturity (new vs. well established and known)
+Community and support
+Number of integrations, plugins, providers, modules, ...
+Implementation
+ Follow DRY (Don't Repeat Yourself) principle as in make sure there are no code duplication so when you change parameter's value for example, you don't need to change it in two different place
+ Readable code - use naming conventions, formatting, ... make sure anyone can read the code and doesn't suffer much in doing so :)
+Terraform
+Development and CI/CD
+ CI pipeline to test Terraform changes (syntax, lint, ...)
+Consider inserting cost considerations (e.g. test whether a change will raise the bill significantly if you are using a public cloud)
+ CD pipeline to deploy/apply Terraform changes after the change is merged
+To apply changes as part of a pull request (without merging a change) you can use something like Atlantis
+This way you can avoid using local configurations and credentials
+Needless to say, but once you started to use Terraform in your org, you should use only that and not allow users to make changes manually in the providers you are using (that will lead to errors when running terraform apply)
+State
+ Stored in a private secured location
+ Encrypted
+ Public access blocked
+ Stored in a shared location as it may be updated by different team members
+ Backed up (e.g. by having versioning)
+ Never edited directly/manually (as it should be managed and updated by Terraform itself as part of the Terraform lifecycle)
+Terraform Projects File Structure
+ Separate directory for each environment (staging, production, ...)
+
+ Separate backend for each environment (as you don't want share the same authentication and access controls for all environments)
+
+ Separate directory in each environment for each component and application
+
+staging/
+  networking/
+  applications/
+  databases/
+
+production/
+  networking/
+  applications/
+    web-app-1/
+    web-app-2/
+  databases/
+    mongo/
+    mysql/
+
+global/
+  user_access_management/
+
+modules/
+  applications/
+    web-app-1/...
+ You don't put everything in main.tf
+
+Terraform configuration files themselves can be organized in many ways
+Possible files:
+main.tf
+outputs.tf
+variables.tf
+providers.tf
+dependencies.tf
+Files can be further divided (avoid managing very long files)
+Terraform Code
+ Variables have description (to document what they are used for)
+ Set lifecycle "prevent_destroy" on resources that should never be deleted (e.g. Terraform state source like S3 bucket)
+ Try not including shell scripts inline (some tend to grow quite a lot over time). Use instead templatefile function to render a script from a file
+ No hardcoded repeated values (common examples are ports, CIDR blocks, etc.). Instead use the concept of locals
+ Prefer using for_each instead of count. count is very limited in modifying lists as it uses list position/index to rely on while for_each is map, set based so it based on specific keys
+ Consistent naming, code style conventions and formatting
+ Set tagging standards
+ Decide on which tags to use. Some ideas:
+owner (team, department, ...)
+generted_by/managed_by/... = "terraform"
+ Rather than specifying tags for each resources, consider setting them at provder level with default_tags. This will help you manage tags at scale
+Modules
+ Avoid duplication of Terraform code/configuration by using modules
+ Try to make modules reusable as much as possible
+ Don't include provider code in a reusable module. Different teams and organizations can use different provider versions and constraints (e.g. different default tags)
+ Avoid hardcoding values, especially in the case reusable modules. To make them reusable, values will have to come from input variables
+ Consider using only separate resources in a module and not inline blocks as they may limit you at some point or another when reusing the module
+ Don't use relative paths! use path references (e.g. path.module, path.root)
+ Try avoiding using latest version of a module. Instead stick for example to tags.
+ Branches can be also used, but since anyone can introduce a change to them, they considered less stable than tags
+Git
+Recommended repositories layout:
+ Separate Repository for modules
+ Separate Repository for environments (this repository makes use of the modules repository mentioned above)
+ Consider using Git tags
+ They can be used for specifying specific versions of modules
+Cloud
+ Don't hardcode image IDs (it's hard to maintain long term). Instead use filters
+
+data "cloud_image" "image_data" {
+  provider = ...
+  filter {
+    name = "name"
+    values = ["some-image-you-would-like-to-use"]
+}
+
+resource "some_instance" "instance" {
+  image = data.cloud_image.image_data.id
+}
+Secrets
+ Basics!
+
+ DON'T store credentials in Terraform configuration as it's highly insecure
+ Eventually sensitive data will end up in your state file, for this reason make sure it's encrypted and only visible to those who should be able to access it
+ Same applies for plan files
+ Provider Credentials
+
+ For local Terraform work/development, you can use generic secret-management tools/CLIs like 1Password or provider-specific options like aws-vault
+ For CI/CD that's highly depends on the CI/CD solution/service you are using:
+GitHub Actions: Use Open ID Connect (OIDC) to establish connection with your provider. You then can specify in your GitHub Actions workflow the following:
+- uses: aws-actions/configure-aws-credentials@v1
+  with:
+    role-to-assume: arn:aws:iam::someIamRole
+    aws-region: ...
+Jenkins: If Jenkins runs on the provider, you can use the provider access entities (like roles, policies, ...) to grant the instance, on which Jenkins is running, access control
+CircleCI: you can use CircleCI Context and then specify it in your CircleCI config file
+context:
+  - some-context
+ Secrets in Terraform Configuration
+
+ Consider how you would like to manage secrets inside Terraform configuration files
+Environment Variables - you define Terraform variables (with sensitive = true) and pass values with environment variables
+pros: simple to use, no need to store sensitive data inside Terraform code
+cons: managed outside of Terraform so tracking, enforcing, managing for different environments, ... is challenging or not feasible
+Encrypted Files - encrypting the secret and storing the encrypted secrets in Terraform configurations
+pros: secrets are encrypted and are of Terraform code and part of the version control system
+cons: working this way can be cumbersome (to modify, you first have to decrypt, makes the changes and then encrypt it again). Still holds security risk if someone gets their hands on the decryption key
+Secret Store - centralized secret store
+pros: no plain text secrets in Terraform configurations. Easy to standardize practices and policies around secrets if they are all in the same place
+cons: not managed as part of the repository, version control, ... makes it easier to makes mistakes in regards to different environments. Costs
